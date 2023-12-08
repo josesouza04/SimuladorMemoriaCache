@@ -13,12 +13,8 @@ def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
     output_content = []  # Lista para armazenar o conteúdo a ser impresso no arquivo
 
     for address in addresses:
-        block_id = address & ~(line_size - 1)  # Ignorando os bits de deslocamento
-        block_id_hex = hex(block_id)[2:].upper()  # Convertendo para hexadecimal e maiúsculas
-        block_id_hex = '0x' + block_id_hex.zfill(8)  # Preenchendo com zeros à esquerda para ter 32 bits
-        block_id_hex = hex(int(block_id_hex, 16) & ~0x3FF)
-        block_id_hex = hex(int(block_id_hex, 16) >> 10)
-        set_index = (block_id // line_size) % num_sets
+        set_index = (address // line_size) % num_sets
+        block_id = (address // line_size) & 0xFFFFFFF0  # Mantém apenas os 32 bits superiores
 
         # Verifica se há hit
         hit = False
@@ -31,9 +27,21 @@ def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
         # Se não houver hit, realiza miss e atualiza a cache
         if not hit:
             misses += 1
-            replace_index = set_index * (cache_size // line_size)
-            cache[replace_index]['valid'] = 1
-            cache[replace_index]['block_id'] = block_id
+            found_empty_line = False
+
+            # Verifica se há uma linha vazia no conjunto
+            for line in range(set_index * (cache_size // line_size), (set_index + 1) * (cache_size // line_size)):
+                if not cache[line]['valid']:
+                    cache[line]['valid'] = 1
+                    cache[line]['block_id'] = block_id
+                    found_empty_line = True
+                    break
+
+            # Se não encontrou uma linha vazia, substitui a primeira linha do conjunto
+            if not found_empty_line:
+                replace_index = set_index * (cache_size // line_size)
+                cache[replace_index]['valid'] = 1
+                cache[replace_index]['block_id'] = block_id
 
         # Armazena o conteúdo da cache para a impressão posterior
         output_content.extend(print_cache(cache, line_size))
@@ -43,9 +51,9 @@ def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
 def print_cache(cache, line_size):
     result = []
     result.append("================")
-    result.append("IDX V ** ADDR **")
+    result.append("IDX V * ADDR *")
     for i, line in enumerate(cache):
-        addr_str = f"0x{line['block_id']*line_size:X}" if line['valid'] else ""
+        addr_str = f"0x{(i*line_size + line['block_id']):08X}" if line['valid'] else ""
         result.append(f"{i:03d} {line['valid']} {addr_str}")
     result.append("================")
     return result
@@ -68,5 +76,5 @@ def main():
 
         output_file.write(f"#hits: {hits}\n#miss: {misses}\n")
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     main()

@@ -1,8 +1,16 @@
 import sys
+from collections import deque
 
 def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
-    # Inicialização da cache
-    cache = [{'valid': 0, 'block_id': 0} for _ in range(cache_size // line_size * num_sets)]
+    if num_sets == 1:
+        # Associatividade completa
+        cache = [{'valid': 0, 'block_id': 0} for _ in range(cache_size // line_size)]
+        fifo_queue = deque()
+    else:
+        # Associatividade por conjuntos
+        lines_per_set = cache_size // (line_size * num_sets)
+        cache = [{'valid': 0, 'block_id': 0} for _ in range(cache_size // line_size)]
+        fifo_queue = [deque() for _ in range(num_sets)]
 
     hits = 0
     misses = 0
@@ -10,40 +18,54 @@ def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
     with open(memory_access_file, 'r') as file:
         addresses = [int(line.strip(), 16) for line in file]
 
-    output_content = []  # Lista para armazenar o conteúdo a ser impresso no arquivo
+    output_content = []
 
     for address in addresses:
-        set_index = (address // line_size) % num_sets
-        block_id = (address // line_size) & 0xFFFFFFF0  # Mantém apenas os 32 bits superiores
+        block_id = address & ~(line_size - 1)
 
-        # Verifica se há hit
+        if num_sets == 1:
+            set_index = 0
+        else:
+            set_index = (block_id // (line_size*num_sets)) % num_sets
+
         hit = False
-        for line in range(set_index * (cache_size // line_size), (set_index + 1) * (cache_size // line_size)):
-            if cache[line]['valid'] and cache[line]['block_id'] == block_id:
-                hits += 1
-                hit = True
-                break
-
-        # Se não houver hit, realiza miss e atualiza a cache
-        if not hit:
-            misses += 1
-            found_empty_line = False
-
-            # Verifica se há uma linha vazia no conjunto
-            for line in range(set_index * (cache_size // line_size), (set_index + 1) * (cache_size // line_size)):
-                if not cache[line]['valid']:
-                    cache[line]['valid'] = 1
-                    cache[line]['block_id'] = block_id
-                    found_empty_line = True
+        if num_sets == 1:
+            for line in range(cache_size // line_size):
+                if cache[line]['valid'] and cache[line]['block_id'] == block_id:
+                    hits += 1
+                    hit = True
+                    break
+        else:
+            for line in range(set_index * lines_per_set, (set_index + 1) * lines_per_set):
+                if cache[line]['valid'] and cache[line]['block_id'] == block_id:
+                    hits += 1
+                    hit = True
                     break
 
-            # Se não encontrou uma linha vazia, substitui a primeira linha do conjunto
-            if not found_empty_line:
-                replace_index = set_index * (cache_size // line_size)
-                cache[replace_index]['valid'] = 1
-                cache[replace_index]['block_id'] = block_id
+        if not hit:
+            misses += 1
+            replace_index = -1
+            if num_sets == 1:
+                if len(fifo_queue) == cache_size // line_size:
+                    replace_index = fifo_queue.popleft()
+                else:
+                    for line in range(cache_size // line_size):
+                        if not cache[line]['valid']:
+                            replace_index = line
+                            break
+            else:
+                if len(fifo_queue[set_index]) == lines_per_set:
+                    replace_index = fifo_queue[set_index].popleft()
+                else:
+                    for line in range(set_index * lines_per_set, (set_index + 1) * lines_per_set):
+                        if not cache[line]['valid']:
+                            replace_index = line
+                            break
 
-        # Armazena o conteúdo da cache para a impressão posterior
+            cache[replace_index]['valid'] = 1
+            cache[replace_index]['block_id'] = block_id
+            fifo_queue.append(replace_index)
+
         output_content.extend(print_cache(cache, line_size))
 
     return output_content, hits, misses
@@ -51,11 +73,10 @@ def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
 def print_cache(cache, line_size):
     result = []
     result.append("================")
-    result.append("IDX V * ADDR *")
+    result.append("IDX V ** ADDR **")
     for i, line in enumerate(cache):
-        addr_str = f"0x{(i*line_size + line['block_id']):08X}" if line['valid'] else ""
+        addr_str = f"0x{(line['block_id'] >> 10):08X}" if line['valid'] else ""
         result.append(f"{i:03d} {line['valid']} {addr_str}")
-    result.append("================")
     return result
 
 def main():
@@ -73,8 +94,8 @@ def main():
     with open("output.txt", 'w') as output_file:
         for line in output_content:
             output_file.write(line + "\n")
-
+        output_file.write("================\n")
         output_file.write(f"#hits: {hits}\n#miss: {misses}\n")
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()

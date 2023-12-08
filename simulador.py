@@ -13,6 +13,12 @@ def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
     for address in addresses:
         set_index = (address // line_size) % num_sets
         block_id = address & ~(line_size - 1)  # Ignorando os bits de deslocamento
+        block_id_hex = hex(block_id)[2:].upper()  # Convertendo para hexadecimal e maiúsculas
+        block_id_hex = '0x' + block_id_hex.zfill(8)  # Preenchendo com zeros à esquerda para ter 32 bits
+        block_id_hex = hex(int(block_id_hex, 16) & ~0x3FF)
+        block_id_hex = hex(int(block_id_hex, 16) >> 10)
+        
+
 
         # Verifica se há hit
         hit = False
@@ -32,12 +38,24 @@ def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
     return cache, hits, misses
 
 
-def print_cache(cache):
-    print("================")
-    print("IDX V ** ADDR **")
-    for i, line in enumerate(cache):
-        print(f"{i:03d} {line['valid']} {line['block_id']:08X}")
-    print("================")
+def print_cache(cache, num_sets, output_file=None):
+    output = "================\n"
+    for i in range(num_sets):
+        output += "IDX V ** ADDR **\n"
+        for j in range(num_sets):
+            if cache[j]['valid']:
+                block_id_hex = format(cache[j]['block_id'], '08X')
+                output += f"{j:03d} 1 0x{block_id_hex}\n"
+            else:
+                output += f"{j:03d} 0\n"
+        output += "================\n"
+
+    if output_file:
+        output_file.write(output)
+    else:
+        print(output)
+
+
 
 def main():
     if len(sys.argv) != 5:
@@ -51,10 +69,8 @@ def main():
 
     cache, hits, misses = simulate_cache(cache_size, line_size, num_sets, memory_access_file)
 
-    print_cache(cache)
-
     with open("output.txt", 'w') as output_file:
-        print_cache(cache)
+        print_cache(cache,num_sets, output_file)
         output_file.write(f"#hits: {hits}\n#miss: {misses}\n")
 
 if __name__ == "__main__":

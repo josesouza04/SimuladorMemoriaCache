@@ -13,8 +13,12 @@ def simulate_cache(cache_size, line_size, num_sets, memory_access_file):
     output_content = []  # Lista para armazenar o conteúdo a ser impresso no arquivo
 
     for address in addresses:
-        set_index = (address // line_size) % num_sets
-        block_id = address // line_size  # Calcula diretamente o bloco
+        block_id = address & ~(line_size - 1)  # Ignorando os bits de deslocamento
+        block_id_hex = hex(block_id)[2:].upper()  # Convertendo para hexadecimal e maiúsculas
+        block_id_hex = '0x' + block_id_hex.zfill(8)  # Preenchendo com zeros à esquerda para ter 32 bits
+        block_id_hex = hex(int(block_id_hex, 16) & ~0x3FF)
+        block_id_hex = hex(int(block_id_hex, 16) >> 10)
+        set_index = (block_id // line_size) % num_sets
 
         # Verifica se há hit
         hit = False

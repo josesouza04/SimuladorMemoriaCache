@@ -1,3 +1,1 @@
-# Simulador de Memória Cache
-
-Trabalho Prático 3 de Organização de Computadores - 2023
+This is the repository with source code for DCC006's cash memory simulator assignment.
